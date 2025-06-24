@@ -1,154 +1,155 @@
-# Auto-Depi: Automated Webhook Updater & Deployer
-
-This repo helps you automatically update your GitHub webhook to match your current ngrok endpoint and auto-deploy your API on a Raspberry Pi.
-
-## Features
-- 🌀 Fetches and validates your ngrok public HTTPS endpoint
-- 🔁 Caches and reuses the endpoint if valid
-- 🔄 Updates the GitHub webhook automatically if the ngrok URL changes
-- 🚀 Deploy script to auto-pull and restart your API
-- 🌐 Optional REST API endpoint to refresh webhook on demand
-- ⚙️ Systemd and .env-driven configuration for robust automation
+# Auto-Depi: The Easiest Way to Auto-Deploy and Sync Your API with GitHub Webhooks
 
 ---
 
-## 1. Setup
+## What is This?
 
-1. **Clone this repo on your Raspberry Pi:**
-   ```sh
-   git clone <your-repo-url>
-   cd auto-depi
-   ```
-2. **Copy and edit the environment file:**
+**Auto-Depi** is a tool that helps you automatically update your GitHub webhook to match your current ngrok endpoint, and auto-deploy your API (Node, Python, etc.) on a Raspberry Pi (or any Linux server). It can also restart your app when you push new code to GitHub. You can use it for any API project!
+
+---
+
+## Who is This For?
+
+- You want to auto-deploy your API when you push to GitHub.
+- You want to keep your GitHub webhook up-to-date with your ngrok tunnel.
+- You want a setup that is as easy and foolproof as possible.
+- You are a beginner and want step-by-step instructions.
+
+---
+
+## Prerequisites (What You Need First)
+
+1. **A Raspberry Pi or Linux server** (with internet access)
+2. **Node.js 18+** (Check with `node -v`)
+   - If you don't have Node.js, install it: https://nodejs.org/en/download
+3. **npm** (comes with Node.js)
+4. **git** (Check with `git --version`)
+5. **ngrok account** (https://ngrok.com/)
+6. **GitHub account** and a repository you want to auto-deploy
+7. **(Optional but recommended) systemd** (most Linux systems have this)
+
+---
+
+## Step 1: Clone This Repo
+
+Open a terminal on your Raspberry Pi or server and run:
+
+```sh
+git clone https://github.com/jongan69/auto-depi
+cd auto-depi
+```
+
+---
+
+## Step 2: Install Dependencies
+
+Run this in your `auto-depi` folder:
+
+```sh
+npm install
+```
+
+If you see errors, make sure you have Node.js 18+ and npm installed.
+
+---
+
+## Step 3: Set Up Your .env File
+
+1. Copy the example file:
    ```sh
    cp .env.example .env
-   # Edit .env with your values
    ```
-   Example `.env` variables:
-   ```env
-   NGROK_API_KEY=your_ngrok_api_key
-   GITHUB_PAT=your_github_personal_access_token
-   GITHUB_OWNER=your_github_username_or_org
-   GITHUB_REPO=your_repo_name
-   WEBHOOK_ID=12345678
-   WEBHOOK_SECRET=your_webhook_secret
-   CACHE_DURATION_MS=3600000
-   APP_DIR=/home/pi/auto-depi
-   APP_SERVICE=my-api-app.service
-   APP_START_CMD="npm start"   # or "python3 main.py" etc
-   NODE_PATH=/usr/bin/node     # optional, if not in $PATH
-   WEBHOOK_UPDATE_INTERVAL=5m  # for systemd timer, e.g. 5m, 10m
-   ```
-3. **Install dependencies:**
-   ```sh
-   npm install
-   ```
+2. Open `.env` in a text editor (like `nano .env` or use VS Code).
+3. Fill in all the values. Here's what each one means:
+
+   | Variable                | What it is (and where to get it) |
+   |-------------------------|----------------------------------|
+   | NGROK_API_KEY           | Your ngrok API key (from ngrok dashboard) |
+   | GITHUB_PAT              | GitHub Personal Access Token (with repo & admin:repo_hook permissions) |
+   | GITHUB_OWNER            | Your GitHub username or org name |
+   | GITHUB_REPO             | The name of your GitHub repo |
+   | WEBHOOK_ID              | The ID of your GitHub webhook (see below) |
+   | WEBHOOK_SECRET          | The secret you set for your webhook (make up a strong password) |
+   | CACHE_DURATION_MS       | How long to cache the ngrok URL (default: 3600000) |
+   | APP_DIR                 | The folder where your API code lives (e.g. /home/pi/auto-depi) |
+   | APP_SERVICE             | The name of your systemd service (e.g. my-api-app.service) |
+   | APP_START_CMD           | How to start your app (e.g. "npm start" or "python3 main.py") |
+   | NODE_PATH               | Path to node (default: /usr/bin/node) |
+   | WEBHOOK_UPDATE_INTERVAL | How often to update the webhook (e.g. 5m for 5 minutes) |
+   | GITHUB_SECRET           | The secret for verifying GitHub webhook payloads (should match WEBHOOK_SECRET) |
+   | PORT                    | The port for the Express server (default: 3000) |
+
+**How to find your webhook ID:**
+- Go to your repo on GitHub > Settings > Webhooks > Click your webhook > The URL will end with `/hooks/12345678` (that number is your ID).
 
 ---
 
-## 2. Usage
+## Step 4: Start ngrok
 
-### Run the webhook updater manually
+You need ngrok running to expose your API to the internet. In a new terminal:
+
 ```sh
-node updateWebhook.js
+ngrok http 3000
 ```
 
-### Run periodically (cron, pm2, or systemd)
-- **Systemd timer (recommended):**
-  1. Create `/etc/systemd/system/update-webhook.service`:
-     ```ini
-     [Unit]
-     Description=Update GitHub Webhook
-
-     [Service]
-     Type=oneshot
-     WorkingDirectory=/home/pi/auto-depi
-     EnvironmentFile=/home/pi/auto-depi/.env
-     ExecStart=${NODE_PATH:-/usr/bin/node} updateWebhook.js
-     User=pi
-     ```
-  2. Create `/etc/systemd/system/update-webhook.timer`:
-     ```ini
-     [Unit]
-     Description=Run webhook updater every interval
-
-     [Timer]
-     OnBootSec=1min
-     OnUnitActiveSec=${WEBHOOK_UPDATE_INTERVAL:-5m}
-     Unit=update-webhook.service
-
-     [Install]
-     WantedBy=timers.target
-     ```
-  3. Enable and start:
-     ```sh
-     sudo systemctl daemon-reload
-     sudo systemctl enable update-webhook.timer
-     sudo systemctl start update-webhook.timer
-     ```
-- **Cron:**
-  ```sh
-  */5 * * * * /usr/bin/node /home/pi/auto-depi/updateWebhook.js >> /home/pi/auto-depi/log.txt 2>&1
-  ```
-- **pm2:**
-  ```sh
-  pm2 start updateWebhook.js --name update-webhook --cron "*/5 * * * *"
-  ```
-
-### REST API endpoint (optional)
-Start the server:
-```sh
-npm run start-server
-```
-Then call:
-```sh
-curl http://localhost:3000/refresh-webhook
-```
+- Copy the HTTPS URL ngrok gives you (e.g. `https://abc123.ngrok.io`).
+- You'll use this for your GitHub webhook URL (see below).
 
 ---
 
-## 3. Auto-Deploy Script
+## Step 5: Set Up Your GitHub Webhook
 
-Edit `deploy.sh` to match your API app's location and restart command. Example for systemd:
-
-```sh
-#!/bin/bash
-set -e
-
-# Load .env
-if [ -f .env ]; then
-  export $(grep -v '^#' .env | xargs)
-fi
-
-cd "$APP_DIR"
-git pull origin main
-npm install
-
-# Restart via systemd
-sudo systemctl restart "$APP_SERVICE"
-```
-
-Make it executable:
-```sh
-chmod +x deploy.sh
-```
+1. Go to your repo on GitHub > Settings > Webhooks > Add webhook
+2. **Payload URL:** `https://<your-ngrok-subdomain>.ngrok.io/webhook`
+3. **Content type:** `application/json`
+4. **Secret:** Use the same value as `WEBHOOK_SECRET` in your `.env`
+5. **Events:** Just the ones you want (usually "push")
+6. **Active:** Yes
+7. Click **Add webhook**
 
 ---
 
-## 4. Systemd Service for Your API App
+## Step 6: Run the Server
 
-Create `/etc/systemd/system/my-api-app.service` (replace with your app's name):
+In your `auto-depi` folder, run:
 
+```sh
+node example-server.js
+```
+
+- You should see: `Server listening on port 3000` (or your chosen port)
+- Leave this running! (Or use systemd below to run in the background)
+
+---
+
+## Step 7: Test Your Setup
+
+- Make a change in your GitHub repo and push it.
+- You should see output in your raspberry pi terminal showing a git pull and a service restart.
+- If you get errors, check your `.env` values and logs.
+
+---
+
+## Step 8: (Recommended) Run as a Service with systemd
+
+This will make sure your server runs in the background and restarts if your Pi reboots.
+
+### 1. Create a systemd service file
+
+```sh
+sudo nano /etc/systemd/system/auto-depi.service
+```
+Paste this in (edit paths if needed):
 ```ini
 [Unit]
-Description=My API App
+Description=Auto-Depi Webhook Server
 After=network.target
 
 [Service]
 Type=simple
 WorkingDirectory=/home/pi/auto-depi
 EnvironmentFile=/home/pi/auto-depi/.env
-ExecStart=/bin/bash -c "${APP_START_CMD}"
+ExecStart=/usr/bin/node index.js
 Restart=always
 User=pi
 
@@ -156,31 +157,125 @@ User=pi
 WantedBy=multi-user.target
 ```
 
-Enable and start your app:
+### 2. Enable and start the service
 ```sh
 sudo systemctl daemon-reload
-sudo systemctl enable my-api-app.service
-sudo systemctl start my-api-app.service
+sudo systemctl enable auto-depi.service
+sudo systemctl start auto-depi.service
+```
+
+### 3. Check status and logs
+```sh
+sudo systemctl status auto-depi.service
+sudo journalctl -u auto-depi.service -f
 ```
 
 ---
 
-## 5. Webhook Setup
-- Set up your GitHub webhook to point to your ngrok URL + `/webhook`.
-- Use your GitHub PAT with `repo` and `admin:repo_hook` scopes.
+## Step 9: (Optional) Auto-Update Webhook with a Timer
+
+If your ngrok URL changes, you want your GitHub webhook to update automatically.
+
+### 1. Create a systemd service for the updater
+```sh
+sudo nano /etc/systemd/system/update-webhook.service
+```
+Paste this in:
+```ini
+[Unit]
+Description=Update GitHub Webhook
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/pi/auto-depi
+EnvironmentFile=/home/pi/auto-depi/.env
+ExecStart=/usr/bin/node updateWebhook.js
+User=pi
+```
+
+### 2. Create a timer
+```sh
+sudo nano /etc/systemd/system/update-webhook.timer
+```
+Paste this in:
+```ini
+[Unit]
+Description=Run webhook updater every interval
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5m
+Unit=update-webhook.service
+
+[Install]
+WantedBy=timers.target
+```
+
+### 3. Enable and start the timer
+```sh
+sudo systemctl daemon-reload
+sudo systemctl enable update-webhook.timer
+sudo systemctl start update-webhook.timer
+```
 
 ---
 
-## 6. Environment Variables
-See `.env.example` for all required variables. All paths, commands, and intervals can be set in `.env` for maximum flexibility.
+## Step 10: Troubleshooting & FAQ
+
+- **Nothing happens when I push to GitHub:**
+  - Check your webhook delivery logs on GitHub (Settings > Webhooks > Recent Deliveries)
+  - Make sure your server is running and accessible from the internet (ngrok must be running)
+  - Check your `.env` values for typos
+- **Webhook signature errors:**
+  - Make sure `WEBHOOK_SECRET` in `.env` matches the secret in your GitHub webhook settings
+- **Service won't start:**
+  - Run `node index.js` manually to see errors
+  - Check logs with `journalctl -u auto-depi.service -f`
+- **ngrok URL keeps changing:**
+  - Use the systemd timer to auto-update the webhook
+- **I don't know my webhook ID:**
+  - Go to GitHub > Settings > Webhooks > Click your webhook > Look at the URL in your browser
+- **I'm lost:**
+  - Read each step carefully. Don't skip anything. Ask for help if you need it!
 
 ---
 
-## 7. Troubleshooting
-- Ensure your ngrok tunnel is running and accessible.
-- Check logs in `log.txt`, via `pm2 logs`, or with `journalctl -u <service>` for systemd.
+## Step 11: Updating Your Code
+
+- To update this tool, just pull the latest code:
+  ```sh
+  cd /home/pi/auto-depi
+  git pull
+  npm install
+  sudo systemctl restart auto-depi.service
+  ```
+
+---
+
+## Step 12: Uninstalling
+
+- To stop and remove the service:
+  ```sh
+  sudo systemctl stop auto-depi.service
+  sudo systemctl disable auto-depi.service
+  sudo rm /etc/systemd/system/auto-depi.service
+  ```
+- To remove the code:
+  ```sh
+  cd ~
+  rm -rf /home/pi/auto-depi
+  ```
+
+---
+
+## Need Help?
+
+- Double-check every step.
+- Google error messages.
+- Ask a friend or on Stack Overflow.
+- If you're really stuck, open an issue on the repo!
 
 ---
 
 ## License
-MIT # auto-depi
+MIT
