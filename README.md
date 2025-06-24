@@ -95,6 +95,13 @@ ngrok http 3000
 - Copy the HTTPS URL ngrok gives you (e.g. `https://abc123.ngrok.io`).
 - You'll use this for your GitHub webhook URL (see below).
 
+> **IMPORTANT ngrok Free Tier Note:**
+>
+> The ngrok free tier only allows **one HTTPS endpoint per account**. This means:
+> - If your API and this webhook server are running as separate servers, only one can be exposed at a time.
+> - To work around this, you should **combine the webhook logic directly into your API server** (so both your API and the webhook endpoint share the same ngrok URL and port).
+> - If you want to keep them separate, you will need a paid ngrok account or use a different tunneling solution.
+
 ---
 
 ## Step 5: Set Up Your GitHub Webhook
