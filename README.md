@@ -101,6 +101,55 @@ ngrok http 3000
 > - If your API and this webhook server are running as separate servers, only one can be exposed at a time.
 > - To work around this, you should **combine the webhook logic directly into your API server** (so both your API and the webhook endpoint share the same ngrok URL and port).
 > - If you want to keep them separate, you will need a paid ngrok account or use a different tunneling solution.
+>
+> **How to combine FastAPI and Node Express under one URL:**
+>
+> You can run your FastAPI app (Python, e.g. on port 8000) and your Node Express server (e.g. on port 3000) on the same machine, and use Express to proxy requests to FastAPI. This way, both your webhook and your API are available under the same ngrok URL.
+>
+> Here is an example of how to do this in your Express server:
+>
+> ```js
+> // In your Node Express server (example-server.js)
+> const { createProxyMiddleware } = require('http-proxy-middleware');
+> const axios = require('axios');
+> 
+> async function mountFastApiRoutes() {
+>     try {
+>         const res = await axios.get('http://0.0.0.0:8000/openapi.json');
+>         const paths = Object.keys(res.data.paths);
+>         
+>         paths.forEach((path) => {
+>             const expressPath = `/api/fastapi${path}`.replace(/\/+/g, '/'); // avoid double slashes
+> 
+>             app.use(expressPath, createProxyMiddleware({
+>                 target: 'http://0.0.0.0:8000',
+>                 changeOrigin: true,
+>                 pathRewrite: {
+>                     [`^/api/fastapi${path}`]: path
+>                 },
+>                 onProxyReq(proxyReq, req) {
+>                     proxyReq.setHeader('X-Request-ID', req.id);
+>                 }
+>             }));
+> 
+>             console.log(`Mounted FastAPI route: ${expressPath} -> ${path}`);
+>         });
+> 
+>     } catch (err) {
+>         console.error('Failed to load FastAPI OpenAPI spec', err.message);
+>     }
+> }
+> 
+> // Call the mount function after your Express app is set up
+> mountFastApiRoutes();
+> ```
+>
+> - This code uses `http-proxy-middleware` and `axios` (install with `npm install http-proxy-middleware axios`).
+> - It fetches the FastAPI OpenAPI spec, then dynamically mounts all FastAPI routes under `/api/fastapi/...` in your Express app.
+> - Now, both your webhook endpoint and your FastAPI API are available under the same ngrok URL and port!
+> - You can adjust the prefix (`/api/fastapi`) as needed.
+> 
+> This is a great way to work around the ngrok free tier limitation and keep everything simple for development and testing.
 
 ---
 
