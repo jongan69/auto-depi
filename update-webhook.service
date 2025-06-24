@@ -1,0 +1,9 @@
+[Unit]
+Description=Update GitHub Webhook
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/pi/auto-depi
+EnvironmentFile=/home/pi/auto-depi/.env
+ExecStart=${NODE_PATH:-/usr/bin/node} updateWebhook.js
+User=pi

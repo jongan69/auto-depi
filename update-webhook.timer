@@ -1,0 +1,10 @@
+[Unit]
+Description=Run webhook updater every interval
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=${WEBHOOK_UPDATE_INTERVAL:-5m}
+Unit=update-webhook.service
+
+[Install]
+WantedBy=timers.target
