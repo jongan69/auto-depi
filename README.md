@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-# auto-depi
-=======
 # Auto-Depi: Automated Webhook Updater & Deployer
 
 This repo helps you automatically update your GitHub webhook to match your current ngrok endpoint and auto-deploy your API on a Raspberry Pi.
@@ -187,4 +184,3 @@ See `.env.example` for all required variables. All paths, commands, and interval
 
 ## License
 MIT # auto-depi
->>>>>>> bf34868 (first commit)
